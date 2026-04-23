@@ -1,430 +1,154 @@
-# Irodori-TTS
+﻿# Irodori-TTS Gradio UI Extended
 
-[![Model](https://img.shields.io/badge/Model-HuggingFace-yellow)](https://huggingface.co/Aratako/Irodori-TTS-500M-v2)
-[![VoiceDesign](https://img.shields.io/badge/VoiceDesign-HuggingFace-orange)](https://huggingface.co/Aratako/Irodori-TTS-500M-v2-VoiceDesign)
-[![Demo](https://img.shields.io/badge/Demo-HuggingFace%20Space-blue)](https://huggingface.co/spaces/Aratako/Irodori-TTS-500M-v2-Demo)
-[![VoiceDesign Demo](https://img.shields.io/badge/VoiceDesign%20Demo-HuggingFace%20Space-red)](https://huggingface.co/spaces/Aratako/Irodori-TTS-500M-v2-VoiceDesign-Demo)
-[![License: MIT](https://img.shields.io/badge/Code%20License-MIT-green.svg)](LICENSE)
+このリポジトリは [Aratako/Irodori-TTS](https://github.com/Aratako/Irodori-TTS) を元にした fork / 改変版です。
 
-Training and inference code for **Irodori-TTS**, a Flow Matching-based Text-to-Speech model. The architecture and training design largely follow [Echo-TTS](https://jordandarefsky.com/blog/2025/echo/), using [DACVAE](https://github.com/facebookresearch/dacvae) continuous latents as the generation target.
+主に、Irodori-TTS の Gradio 画面を使いやすくすることを目的にしています。  
+参照音声を切り替えながら何度も生成する作業や、生成結果を比較して保存する作業をしやすくするために、参照音声プリセット、個別 Save ボタン、WAV メタデータによる設定復元などを追加しています。
 
-> [!IMPORTANT]
-> `main` tracks the **v2** codebase and is intended for use with the **Irodori-TTS-500M-v2** and **Irodori-TTS-500M-v2-VoiceDesign** model releases.
-> If you need the previous v1 code, use the `v1` tag.
-> v1 and v2 checkpoints / preprocessing are not compatible across versions.
-> The previous public v1 model is available at [Aratako/Irodori-TTS-500M](https://huggingface.co/Aratako/Irodori-TTS-500M).
+## 主な追加機能
 
-For model weights and audio samples, please refer to the [base model card](https://huggingface.co/Aratako/Irodori-TTS-500M-v2) and the [VoiceDesign model card](https://huggingface.co/Aratako/Irodori-TTS-500M-v2-VoiceDesign).
+### File Output Settings
 
-## Features
+生成 WAV ファイルの出力先フォルダと保存先フォルダを UI から設定できるようにしました。
 
-- **Flow Matching TTS**: Rectified Flow Diffusion Transformer (RF-DiT) over continuous DACVAE latents
-- **Voice Cloning**: Zero-shot voice cloning from reference audio
-- **Voice Design**: Caption-conditioned style control
-- **Multi-GPU Training**: Distributed training via `uv run torchrun` with gradient accumulation, mixed precision (bf16), and W&B logging
-- **PEFT LoRA Fine-Tuning**: Parameter-efficient adaptation with PEFT/LoRA for released checkpoints
-- **Flexible Inference**: CLI, Gradio Web UI, and HuggingFace Hub checkpoint support
+作業用の出力先フォルダと、採用データの保存先フォルダを分けて管理できます。
 
-## Architecture
+### 生成結果の個別 Save ボタン
 
-The v2 codebase supports two closely related checkpoint families:
+各 Generated Audio に個別の Save ボタンを追加しました。
 
-1. **Base model (`Aratako/Irodori-TTS-500M-v2`)**:
-   Text encoder + reference latent encoder + diffusion transformer. The reference latent encoder consumes patched DACVAE latents from reference audio for speaker/style conditioning.
-2. **VoiceDesign model (`Aratako/Irodori-TTS-500M-v2-VoiceDesign`)**:
-   Text encoder + caption encoder + diffusion transformer. The caption encoder consumes style-control text and the speaker/reference branch is disabled.
+生成された候補の中から、採用したい音声ファイルだけをワンクリックで保存先フォルダへコピーできます。
 
-Shared building blocks:
+### Reference Audio Presets
 
-1. **Text Encoder**: Token embeddings initialized from a pretrained LLM, followed by self-attention + SwiGLU transformer layers with RoPE
-2. **Condition Encoder**: Either a reference latent encoder for the base model or a caption encoder for the VoiceDesign model
-3. **Diffusion Transformer**: Joint-attention DiT blocks with Low-Rank AdaLN (timestep-conditioned adaptive layer normalization), half-RoPE, and SwiGLU MLPs
+参照音声をプリセットボタンへ登録し、ワンクリックで呼び出せるようにしました。
 
-Audio is represented as continuous latent sequences via the codec configured by the checkpoint. v2 uses the 32-dim [Semantic-DACVAE-Japanese-32dim](https://huggingface.co/Aratako/Semantic-DACVAE-Japanese-32dim) codec for 48kHz waveform reconstruction.
+プリセットボタンは色を変更できます。  
+また、ドラッグ操作で好きな位置へ並べ替えられます。
 
-## Installation
+WAV ファイルに音声テキストのメタデータが埋め込まれている場合は、プリセット枠内にその内容の一部を表示します。
 
-```bash
-git clone https://github.com/Aratako/Irodori-TTS.git
-cd Irodori-TTS
-uv sync
-```
+### Reference Audio File Name
 
-**Note**: For Linux/Windows with CUDA, PyTorch is automatically installed from the cu128 index. For macOS (MPS) or CPU-only usage, `uv sync` will install the default PyTorch build.
+現在読み込まれている参照音声ファイル名を表示するようにしました。
 
-## Quick Start
+どの参照音声が適用中か確認しやすくなります。
 
-### Simple Inference
+### 生成 WAV ファイル名の変更
 
-```bash
-uv run python infer.py \
-  --hf-checkpoint Aratako/Irodori-TTS-500M-v2 \
-  --text "今日はいい天気ですね。" \
-  --ref-wav path/to/reference.wav \
-  --output-wav outputs/sample.wav
-```
+生成した WAV ファイル名に、使用した参照音声ファイル名を反映するようにしました。
 
-### Inference without Reference Audio
+生成した WAV ファイルを見た時点で、どの参照音声を使ったものか判別しやすくなります。
+
+### 生成音声ファイルへのメタデータ付与
+
+生成した WAV ファイルに、生成時の設定をメタデータとして付与する機能を追加しました。
+
+保存される主な情報は以下です。
+
+- 音声テキスト
+- Num Steps
+- Num Candidates
+- Seed
+- CFG Guidance Mode
+- CFG Scale Text
+- CFG Scale Speaker
+
+メタデータは通常のファイル操作では見えにくい情報ですが、後述の「生成時の設定復元」機能で使用します。
+
+この機能を利用するには、Python ライブラリ [Mutagen](https://mutagen.readthedocs.io/) が必要です。
 
 ```bash
-uv run python infer.py \
-  --hf-checkpoint Aratako/Irodori-TTS-500M-v2 \
-  --text "今日はいい天気ですね。" \
-  --no-ref \
-  --output-wav outputs/sample.wav
+pip install mutagen
 ```
 
-### VoiceDesign Inference
+### Mutagen 依存について
 
-```bash
-uv run python infer.py \
-  --hf-checkpoint Aratako/Irodori-TTS-500M-v2-VoiceDesign \
-  --text "今日はいい天気ですね。" \
-  --caption "落ち着いた女性の声で、近い距離感でやわらかく自然に読み上げてください。" \
-  --no-ref \
-  --output-wav outputs/sample_voice_design.wav
+メタデータ付与のために、音声ファイルのタグ読み書きを行うライブラリ Mutagen に依存しています。
+
+Mutagen は Python 製のメタデータ操作ライブラリです。  
+音声ファイルにタイトルや任意情報を書き込んだり、既存のタグを読み出したりする用途に使われます。
+
+この fork では、生成した WAV ファイルに対して ID3 タグ形式で生成時の設定を書き込み、再読み込み時にその情報を取得します。
+
+Mutagen が導入されていない場合、メタデータの保存・読み込み機能は使えません。  
+ただし、音声生成自体とは別の補助機能なので、Mutagen がない場合でも音声生成そのものは動作します。
+
+### 音声ファイルのドロップによる生成時の設定再利用
+
+メタデータ付き音声ファイルを Text 欄へドロップすると、埋め込まれた内容を読み取って、音声テキストや一部設定を復元できます。
+
+また、プリセットボタンを Text 欄へドラッグ＆ドロップすることで、その参照音声ファイルに埋め込まれた内容を復元することもできます。
+
+過去に生成した音声ファイルの条件を再利用したいときに便利です。
+
+### Emoji / 記号パネル
+
+感情表現や発声補助用の記号を、ボタンから入力できるようにしました。
+
+### Clear Text
+
+Text 欄の内容を空にする Clear Text ボタンを追加しました。
+
+### Seed の Clear / Last
+
+Seed 欄に Clear と Last を追加しました。
+
+ランダム生成に戻す操作と、直前の Seed を再利用する操作をしやすくしました。
+
+### Generate ボタンの追加
+
+Generate ボタンをText 欄の下にも配置しました。
+
+### Generate / Save ボタンの視認性改善
+
+Generate ボタンおよび Save ボタンについて、押したことや処理中であることが分かりやすいように見た目を調整しました。
+
+## 保存されるローカルファイルについて
+
+この UI は、設定やプリセットをローカルファイルとして保存します。
+
+主な保存先は以下です。
+
+- `gradio_app_settings.json`
+- `reference_audio_presets/`
+- `output_voice/`
+
+これらには、個人の設定、参照音声ファイル、生成した音声ファイルが含まれる可能性があります。  
+GitHub へ公開する場合は、これらをコミットしないように注意してください。
+
+`.gitignore` には、少なくとも以下を含めることをおすすめします。
+
+```gitignore
+gradio_app_settings.json
+reference_audio_presets/
+output_voice/
+.gradio_visible_outputs/
+__pycache__/
+*.pyc
+.venv/
+venv/
 ```
 
-### Gradio Web UI
+## ライセンスと利用条件
 
-```bash
-uv run python gradio_app.py --server-name 0.0.0.0 --server-port 7860
-```
+この fork は [Aratako/Irodori-TTS](https://github.com/Aratako/Irodori-TTS) を元にした Gradio UI 改変版です。
 
-Then access the UI at `http://localhost:7860`.
-The hosted v2 demo is available at [Aratako/Irodori-TTS-500M-v2-Demo](https://huggingface.co/spaces/Aratako/Irodori-TTS-500M-v2-Demo).
+コード、モデル重み、学習済みモデル、音声サンプルなどの利用条件は、元プロジェクトおよび各配布元のライセンスを確認してください。
 
-For the VoiceDesign checkpoint, use the dedicated UI:
+この fork によって、元モデルや元プロジェクトのライセンス条件が変更されることはありません。
 
-```bash
-uv run python gradio_app_voicedesign.py --server-name 0.0.0.0 --server-port 7861
-```
+また、本人の同意なしに実在人物の声を模倣する用途、なりすまし、誤情報、権利侵害につながる用途には使用しないでください。
 
-The hosted VoiceDesign demo is available at [Aratako/Irodori-TTS-500M-v2-VoiceDesign-Demo](https://huggingface.co/spaces/Aratako/Irodori-TTS-500M-v2-VoiceDesign-Demo).
+## Credits
 
-`gradio_app.py` is for `Aratako/Irodori-TTS-500M-v2`. `gradio_app_voicedesign.py` is for `Aratako/Irodori-TTS-500M-v2-VoiceDesign`.
+この fork は [Aratako/Irodori-TTS](https://github.com/Aratako/Irodori-TTS) を元にしています。  
+元プロジェクトの作者および関係者に感謝します。
 
-## Inference
+この fork では、主に Gradio UI の操作性改善と、生成作業を繰り返し行うための補助機能を追加しています。
 
-### CLI
+利用している主なライブラリ・ツール:
 
-```bash
-uv run python infer.py \
-  --hf-checkpoint Aratako/Irodori-TTS-500M-v2 \
-  --text "今日はいい天気ですね。" \
-  --ref-wav path/to/reference.wav \
-  --output-wav outputs/sample.wav
-```
-
-Local checkpoints (`.pt` or `.safetensors`) are also supported:
-
-```bash
-uv run python infer.py \
-  --checkpoint outputs/checkpoint_final.safetensors \
-  --text "今日はいい天気ですね。" \
-  --ref-wav path/to/reference.wav \
-  --output-wav outputs/sample.wav
-```
-
-VoiceDesign checkpoints also support caption conditioning:
-
-```bash
-uv run python infer.py \
-  --hf-checkpoint Aratako/Irodori-TTS-500M-v2-VoiceDesign \
-  --text "今日はいい天気ですね。" \
-  --caption "落ち着いた、近い距離感の女性話者" \
-  --no-ref \
-  --output-wav outputs/sample_voice_design.wav
-```
-
-### Inference Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `--checkpoint` / `--hf-checkpoint` | (required, either one) | Local checkpoint file or Hugging Face repo id |
-| `--text` | (required) | Text to synthesize |
-| `--caption` | None | Optional style-control text for VoiceDesign checkpoints |
-| `--output-wav` | `output.wav` | Output waveform path |
-| `--ref-wav` | None | Reference waveform path for speaker conditioning |
-| `--ref-latent` | None | Pre-computed reference latent (`.pt`) for speaker conditioning |
-| `--no-ref` | False | Disable speaker reference conditioning |
-| `--max-ref-seconds` | `30.0` | Maximum reference duration in seconds |
-| `--ref-normalize-db` | -16.0 | Reference loudness target before DACVAE encode (set `none` to disable) |
-| `--ref-ensure-max` | True | Scale reference down only when peak exceeds 1.0 (used when `--ref-normalize-db` is disabled) |
-| `--codec-repo` | `Aratako/Semantic-DACVAE-Japanese-32dim` | Codec repo used for latent encode/decode |
-| `--codec-deterministic-encode` | True | Use deterministic DACVAE encode path |
-| `--codec-deterministic-decode` | True | Use deterministic DACVAE watermark-message decode path |
-| `--enable-watermark` | False | Enable DACVAE watermark branch during decode |
-| `--max-text-len` | checkpoint metadata or `256` | Maximum token length for text conditioning |
-| `--max-caption-len` | checkpoint metadata or `max_text_len` | Maximum token length for caption conditioning |
-| `--num-steps` | 40 | Number of Euler integration steps |
-| `--num-candidates` | 1 | Number of candidates to generate in one pass |
-| `--decode-mode` | `sequential` | Codec decode mode: `sequential` or `batch` |
-| `--cfg-scale-text` | 3.0 | CFG scale for text conditioning |
-| `--cfg-scale-caption` | 3.0 | CFG scale for caption conditioning |
-| `--cfg-scale-speaker` | 5.0 | CFG scale for speaker conditioning |
-| `--cfg-guidance-mode` | `independent` | CFG mode: `independent`, `joint`, `alternating` |
-| `--cfg-scale` | None | Deprecated shared CFG override for all enabled conditions |
-| `--cfg-min-t` | `0.5` | Lower timestep bound for CFG |
-| `--cfg-max-t` | `1.0` | Upper timestep bound for CFG |
-| `--truncation-factor` | None | Scale initial Gaussian noise before sampling |
-| `--rescale-k` / `--rescale-sigma` | None | Temporal score rescaling parameters; must be set together |
-| `--context-kv-cache` | True | Precompute context K/V projections for faster sampling |
-| `--speaker-kv-scale` | None | Extra speaker K/V scaling for stronger speaker identity |
-| `--speaker-kv-min-t` | `0.9` | Disable speaker K/V scaling after this timestep threshold |
-| `--speaker-kv-max-layers` | None | Apply speaker K/V scaling only to first N diffusion layers |
-| `--model-device` | auto | Device for model (`cuda`, `mps`, `cpu`) |
-| `--codec-device` | auto | Device for DACVAE codec |
-| `--model-precision` | `fp32` | Model precision (`fp32`, `bf16`) |
-| `--codec-precision` | `fp32` | Codec precision (`fp32`, `bf16`) |
-| `--seed` | random | Random seed for reproducibility |
-| `--compile-model` | False | Enable `torch.compile` for faster inference |
-| `--compile-dynamic` | False | Use `dynamic=True` for `torch.compile` |
-| `--trim-tail` | True | Trim trailing silence via flattening heuristic |
-| `--tail-window-size` | `20` | Window size used for tail trimming |
-| `--tail-std-threshold` | `0.05` | Std threshold for tail trimming |
-| `--tail-mean-threshold` | `0.1` | Mean threshold for tail trimming |
-| `--show-timings` | True | Print per-stage timing breakdown |
-
-## Training
-
-### 1. Prepare Manifest (Precompute DACVAE Latents)
-
-Encodes audio from a Hugging Face dataset into DACVAE latents and produces a JSONL manifest for training.
-
-```bash
-uv run python prepare_manifest.py \
-  --dataset myorg/my_dataset \
-  --split train \
-  --audio-column audio \
-  --text-column text \
-  --output-manifest data/train_manifest.jsonl \
-  --latent-dir data/latents \
-  --device cuda
-```
-
-To include `speaker_id` in the manifest (for speaker-conditioned training):
-
-```bash
-uv run python prepare_manifest.py \
-  --dataset myorg/my_dataset \
-  --split train \
-  --audio-column audio \
-  --text-column text \
-  --speaker-column speaker \
-  --output-manifest data/train_manifest.jsonl \
-  --latent-dir data/latents \
-  --device cuda
-```
-
-To include `caption` in the manifest (for caption-conditioned voice design training):
-
-```bash
-uv run python prepare_manifest.py \
-  --dataset myorg/my_dataset \
-  --split train \
-  --audio-column audio \
-  --text-column text \
-  --caption-column caption \
-  --speaker-column speaker \
-  --output-manifest data/train_manifest.jsonl \
-  --latent-dir data/latents \
-  --device cuda
-```
-
-When training the caption-conditioned voice-design model, `speaker_id` is optional. The
-voice-design path disables speaker/reference conditioning and learns from `text + caption`.
-
-This produces a JSONL manifest with entries like:
-
-```json
-{"text": "こんにちは", "caption": "落ち着いた、近い距離感の女性話者", "latent_path": "data/latents/00001.pt", "speaker_id": "myorg/my_dataset:speaker_001", "num_frames": 750}
-```
-
-### 2. Training
-
-Single-GPU training:
-
-```bash
-uv run python train.py \
-  --config configs/train_500m_v2.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts
-```
-
-VoiceDesign training uses a dedicated config:
-
-```bash
-uv run python train.py \
-  --config configs/train_500m_v2_voice_design.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts_voice_design
-```
-
-`configs/train_500m_v2_voice_design.yaml` sets `use_caption_condition: true` and disables the
-speaker/reference branch. Caption-free configs continue to use speaker conditioning when
-`speaker_id` / reference inputs are available.
-
-The VoiceDesign config also enables `caption_warmup: true` for optional caption-branch warmup.
-`warmup_steps` controls the LR scheduler, while `caption_warmup_steps` controls how long
-non-caption gradients are discarded before normal joint training resumes.
-
-Multi-GPU DDP training:
-
-```bash
-uv run torchrun --nproc_per_node 4 train.py \
-  --config configs/train_500m_v2.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts \
-  --device cuda
-```
-
-Training supports YAML config files with `model` and `train` sections. CLI arguments take precedence over YAML values. See `uv run python train.py --help` for all available options.
-
-#### Fine-Tuning from Released Weights
-
-Start a new training run from released inference weights (`.safetensors`). This initializes only the model weights; optimizer / scheduler state starts fresh.
-
-```bash
-uv run python train.py \
-  --config configs/train_500m_v2.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts_ft \
-  --init-checkpoint path/to/Irodori-TTS-500M-v2.safetensors
-```
-
-LoRA fine-tuning:
-
-```bash
-uv run python train.py \
-  --config configs/train_500m_v2_lora.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts_lora \
-  --init-checkpoint path/to/Irodori-TTS-500M-v2.safetensors
-```
-
-Caption-conditioned voice-design LoRA fine-tuning:
-
-```bash
-uv run python train.py \
-  --config configs/train_500m_v2_voice_design_lora.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts_voice_design_lora \
-  --init-checkpoint path/to/Irodori-TTS-500M-v2.safetensors
-```
-
-Available LoRA target presets:
-
-- `text_attn_mlp`: text encoder attention + attention gate + MLP
-- `caption_attn_mlp`: caption encoder attention + attention gate + MLP
-- `speaker_attn_mlp`: speaker encoder attention + attention gate + MLP, plus `speaker_encoder.in_proj`
-- `diffusion_attn`: diffusion attention only, including text/speaker/caption context KV and attention gate
-- `diffusion_attn_mlp`: `diffusion_attn` + diffusion MLP
-- `all_attn`: all attention blocks across text/caption/speaker/diffusion, including attention gates
-- `diffusion_full`: diffusion stack broadly: `cond_module`, `in_proj/out_proj`, diffusion attention, diffusion MLP, and AdaLN
-- `adaln`: diffusion-block AdaLN layers only
-- `conditioning`: conditioning-side projections only: `cond_module`, `speaker_encoder.in_proj`, and diffusion context KV projections
-- `all_attn_mlp`: `all_attn` + text/caption/speaker/diffusion MLP, plus `speaker_encoder.in_proj`
-- `all_linear`: all `nn.Linear` layers in the model; embeddings and norm weights are not included
-
-`--lora-target-modules` also accepts a regex string or a comma-separated list of module suffixes. Resume automatically restores the saved LoRA config from the training checkpoint unless you explicitly override it.
-
-When `--lora` is enabled, checkpoints are saved as adapter-only directories containing PEFT adapter weights plus trainer state for resume.
-
-#### Resuming Interrupted Training
-
-Resume an existing training run from a training checkpoint. Full-model runs use `.pt`; LoRA runs use checkpoint directories. Both restore optimizer, scheduler, and step state.
-
-```bash
-uv run python train.py \
-  --config configs/train_500m_v2.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts \
-  --resume outputs/irodori_tts/checkpoint_0010000.pt
-```
-
-LoRA resume example:
-
-```bash
-uv run python train.py \
-  --config configs/train_500m_v2_lora.yaml \
-  --manifest data/train_manifest.jsonl \
-  --output-dir outputs/irodori_tts_lora \
-  --resume outputs/irodori_tts_lora/checkpoint_0010000
-```
-
-If you move a LoRA checkpoint to another environment and the original base-checkpoint path is no longer valid, pass `--init-checkpoint path/to/base_model.safetensors` together with `--resume` to override the saved base-model path.
-
-### 3. Checkpoint Conversion
-
-Convert a training checkpoint to inference-only safetensors format:
-
-```bash
-uv run python convert_checkpoint_to_safetensors.py outputs/checkpoint_final.pt
-```
-
-LoRA adapter checkpoints can also be converted directly:
-
-```bash
-uv run python convert_checkpoint_to_safetensors.py outputs/irodori_tts_lora/checkpoint_final
-```
-
-LoRA adapter checkpoints are merged into the base model automatically during conversion, so the exported `.safetensors` file is directly usable for inference.
-
-## Project Structure
-
-```text
-Irodori-TTS/
-├── train.py                    # Training entry point (DDP support)
-├── infer.py                    # CLI inference
-├── gradio_app.py               # Gradio web UI
-├── gradio_app_voicedesign.py   # Gradio web UI for VoiceDesign checkpoints
-├── prepare_manifest.py         # Dataset -> DACVAE latent preprocessing
-├── convert_checkpoint_to_safetensors.py  # Checkpoint converter
-│
-├── irodori_tts/                # Core library
-│   ├── model.py                # TextToLatentRFDiT architecture
-│   ├── rf.py                   # Rectified Flow utilities & Euler CFG sampling
-│   ├── codec.py                # DACVAE codec wrapper
-│   ├── dataset.py              # Dataset and collator
-│   ├── tokenizer.py            # Pretrained LLM tokenizer wrapper
-│   ├── config.py               # Model / Train / Sampling config dataclasses
-│   ├── inference_runtime.py    # Cached, thread-safe inference runtime
-│   ├── lora.py                 # PEFT LoRA integration helpers
-│   ├── text_normalization.py   # Japanese text normalization
-│   ├── optim.py                # Muon + AdamW optimizer
-│   └── progress.py             # Training progress tracker
-│
-└── configs/
-    ├── train_500m_v2.yaml                    # 500M v2 model config
-    ├── train_500m_v2_lora.yaml               # 500M v2 LoRA fine-tuning config
-    ├── train_500m_v2_voice_design.yaml       # 500M v2 VoiceDesign full fine-tuning config
-    ├── train_500m_v2_voice_design_lora.yaml  # 500M v2 VoiceDesign LoRA fine-tuning config
-    ├── train_500m.yaml                       # 500M v1 model config
-    └── train_2.5b.yaml                       # 2.5B parameter model config
-```
-
-## License
-
-- **Code**: [MIT License](LICENSE)
-- **Model Weights**: Please refer to the [base model card](https://huggingface.co/Aratako/Irodori-TTS-500M-v2) and the [VoiceDesign model card](https://huggingface.co/Aratako/Irodori-TTS-500M-v2-VoiceDesign) for licensing details
-
-## Acknowledgments
-
-This project builds upon the following works:
-
-- [Echo-TTS](https://jordandarefsky.com/blog/2025/echo/) — Architecture and training design reference
-- [DACVAE](https://github.com/facebookresearch/dacvae) — Audio VAE
-
-## Citation
-
-```bibtex
-@misc{irodori-tts,
-  author = {Chihiro Arata},
-  title = {Irodori-TTS: A Flow Matching-based Text-to-Speech Model with Emoji-driven Style Control},
-  year = {2026},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/Aratako/Irodori-TTS}}
-}
-```
+- [Irodori-TTS](https://github.com/Aratako/Irodori-TTS)
+- [Gradio](https://www.gradio.app/)
+- [Mutagen](https://mutagen.readthedocs.io/)
