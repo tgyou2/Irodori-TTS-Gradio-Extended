@@ -4,11 +4,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import os
 import shutil
-import subprocess
-import sys
-import threading
 from functools import partial
 from pathlib import Path
 
@@ -1245,27 +1241,6 @@ def _persist_directory_settings(output_dir: str | None, save_dir: str | None) ->
         )
     )
     _save_app_settings(output_dir=normalized_output_dir, save_dir=save_dir)
-
-
-def _restart_gradio_app() -> str:
-    target_path = Path(__file__).resolve()
-    launch_args = [str(sys.executable), str(target_path), *sys.argv[1:]]
-    helper_code = (
-        "import subprocess, sys, time; "
-        "cwd = sys.argv[1]; "
-        "cmd = sys.argv[2:]; "
-        "time.sleep(1.2); "
-        "subprocess.Popen(cmd, cwd=cwd, creationflags=getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0))"
-    )
-    subprocess.Popen(
-        [str(sys.executable), "-c", helper_code, str(target_path.parent), *launch_args],
-        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        | getattr(subprocess, "DETACHED_PROCESS", 0),
-    )
-
-    threading.Timer(0.3, lambda: os._exit(0)).start()
-    return f"Reload requested for {target_path.name}"
-
 
 
 def _reference_preset_dir() -> Path:
@@ -2761,10 +2736,6 @@ def build_ui() -> gr.Blocks:
             ),
             elem_id=REFERENCE_PRESET_STYLE_HTML_ID,
         )
-        restart_gradio_btn = gr.Button(
-            "Reload gradio_app.py",
-            variant="secondary",
-        )
 
         reference_preset_uploaders: list[gr.File] = []
         reference_preset_buttons: list[gr.Button] = []
@@ -3126,11 +3097,6 @@ def build_ui() -> gr.Blocks:
         save_dir_raw.change(
             _persist_directory_settings,
             inputs=[output_dir_raw, save_dir_raw],
-            queue=False,
-        )
-        restart_gradio_btn.click(
-            _restart_gradio_app,
-            outputs=[clear_cache_msg],
             queue=False,
         )
 

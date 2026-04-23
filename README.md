@@ -28,6 +28,8 @@
 
 WAV ファイルに音声テキストのメタデータが埋め込まれている場合は、プリセット枠内にその内容の一部を表示します。
 
+動作確認用のサンプルとして、`examples/reference_audio_presets_test.wav` を同梱しています。
+
 ### Reference Audio File Name
 
 現在読み込まれている参照音声ファイル名を表示するようにしました。
