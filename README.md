@@ -5,6 +5,16 @@
 主に、Irodori-TTS の Gradio 画面を使いやすくすることを目的にしています。  
 参照音声を切り替えながら何度も生成する作業や、生成結果を比較して保存する作業をしやすくするために、参照音声プリセット、個別 Save ボタン、WAV メタデータによる設定復元などを追加しています。
 
+## Screenshots
+
+### Reference Audio Presets
+
+![Reference Audio Presets](docs/images/reference-presets.png)
+
+### Generation UI
+
+![Generation UI](docs/images/generation-ui.png)
+
 ## 主な追加機能
 
 ### File Output Settings

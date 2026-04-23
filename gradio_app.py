@@ -942,9 +942,12 @@ CUSTOM_HEAD = f"""
       const sourceIndex = referencePresetDragState.slotIndex;
       const presetPath = referencePresetDragState.presetPath;
       const wasActive = referencePresetDragState.active;
+      if (!wasActive) {{
+        resetReferencePresetDragState();
+        return;
+      }}
       const {{ targetSlot, insidePrompt }} = updateReferencePresetDropTarget(event.clientX, event.clientY);
       resetReferencePresetDragState();
-      if (!wasActive) return;
       if (insidePrompt && presetPath) {{
         dispatchPresetMetadataDrop(presetPath);
         return;
@@ -976,6 +979,7 @@ CUSTOM_HEAD = f"""
       const startDrag = (event) => {{
         if (event.button !== 0) return;
         if (!dragHandle || !dragHandle.contains(event.target)) return;
+        if (referencePresetDragState.pointerId !== null) return;
         const slotIndex = slot.getAttribute('data-slot-index');
         const presetPath = getReferencePresetPath(slotIndex);
         if (!slotIndex || !presetPath) return;
