@@ -542,10 +542,14 @@ CUSTOM_CSS = f"""
   min-width: 0 !important;
   min-height: 34px !important;
   height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
   padding: 2px 3px !important;
   font-size: 0.64rem !important;
   font-weight: 700 !important;
   line-height: 0.95 !important;
+  text-align: left !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -572,8 +576,12 @@ CUSTOM_CSS = f"""
 .{REFERENCE_PRESET_SET_BUTTON_CLASS} span,
 .{REFERENCE_PRESET_SET_BUTTON_CLASS} .wrap,
 .{REFERENCE_PRESET_SET_BUTTON_CLASS} .svelte-1ipelgc {{
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
   font-size: 0.64rem !important;
   line-height: 0.95 !important;
+  text-align: left !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -1288,7 +1296,7 @@ def _truncate_reference_preset_name(name: str, max_chars: int = REFERENCE_PRESET
         return "Empty"
     if len(text) <= max_chars:
         return text
-    return text[: max_chars - 1] + "遯ｶ・ｦ"
+    return text[: max_chars - 3] + "..."
 
 
 def _reference_preset_button_label(preset: dict[str, str], slot_index: int) -> str:
@@ -1297,7 +1305,7 @@ def _reference_preset_button_label(preset: dict[str, str], slot_index: int) -> s
         display_name = f"Preset {slot_index + 1}"
     else:
         display_name = Path(display_name).stem
-    return _truncate_reference_preset_name(display_name)
+    return display_name
 
 
 def _reference_preset_has_file(preset: dict[str, str]) -> bool:
@@ -1504,6 +1512,9 @@ def _set_reference_preset_color(
         "path": str(preset.get("path", "") or "").strip(),
         "name": str(preset.get("name", "") or "").strip(),
         "color": next_color,
+        "prompt_preview": _reference_preset_prompt_preview_text(
+            preset.get("prompt_preview", "")
+        ),
     }
     _save_app_settings(
         output_dir=output_dir,
