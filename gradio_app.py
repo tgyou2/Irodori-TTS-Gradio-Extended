@@ -1945,9 +1945,18 @@ def _resolve_checkpoint_path(raw_checkpoint: str) -> str:
     if suffix in {".pt", ".safetensors"}:
         return checkpoint
 
-    resolved = hf_hub_download(repo_id=checkpoint, filename="model.safetensors")
-    print(f"[gradio] checkpoint: hf://{checkpoint} -> {resolved}", flush=True)
-    return str(resolved)
+    try:
+        resolved = hf_hub_download(
+            repo_id=checkpoint,
+            filename="model.safetensors",
+            local_files_only=True,
+        )
+        print(f"[gradio] checkpoint: hf://{checkpoint} (cache) -> {resolved}", flush=True)
+        return str(resolved)
+    except Exception:
+        resolved = hf_hub_download(repo_id=checkpoint, filename="model.safetensors")
+        print(f"[gradio] checkpoint: hf://{checkpoint} (download) -> {resolved}", flush=True)
+        return str(resolved)
 
 
 def _extract_prompt_text(value: dict | str | None) -> str:
