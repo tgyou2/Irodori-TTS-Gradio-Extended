@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 from __future__ import annotations
 
 import argparse
@@ -52,6 +52,7 @@ SEED_CLEAR_BUTTON_ID = "seed-clear-button"
 SEED_LAST_BUTTON_ID = "seed-last-button"
 SEED_TEXTBOX_ID = "seed-textbox"
 SAVE_GENERATED_AUDIO_BUTTON_CLASS = "save-generated-audio-button"
+GENERATED_AUDIO_SLOT_CLASS = "generated-audio-slot"
 SETTINGS_FILE_NAME = "gradio_app_settings.json"
 DEFAULT_OUTPUT_DIR = "output_voice"
 APP_DATA_ROOT = Path(__file__).resolve().parent
@@ -334,6 +335,26 @@ CUSTOM_CSS = f"""
   color: #ffffff !important;
   opacity: 1 !important;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08) inset !important;
+}}
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} .wrap > .icon-wrap,
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} .wrap > .spinner,
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} .wrap svg.animate-spin,
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} .pending,
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} [class*="loading"],
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} [class*="progress"] {{
+  opacity: 0.22 !important;
+}}
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} .progress-container,
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} .progress-text,
+.{SAVE_GENERATED_AUDIO_BUTTON_CLASS} .eta-text {{
+  display: none !important;
+}}
+.{GENERATED_AUDIO_SLOT_CLASS} .progress-text,
+.{GENERATED_AUDIO_SLOT_CLASS} .eta-text,
+.{GENERATED_AUDIO_SLOT_CLASS} .progress-container,
+.{GENERATED_AUDIO_SLOT_CLASS} .pending,
+.{GENERATED_AUDIO_SLOT_CLASS} [class*="progress"] {{
+  display: none !important;
 }}
 #{REFERENCE_PRESET_STYLE_HTML_ID} {{
   min-height: 0 !important;
@@ -671,6 +692,16 @@ CUSTOM_CSS = f"""
   margin-top: 4px;
 }}
 #{REFERENCE_PRESET_NOTICE_ID} .preset-notice {{
+  font-size: 0.84rem;
+  line-height: 1.25;
+  color: #c92a2a;
+  font-weight: 600;
+}}
+.save-button-notice-host {{
+  min-height: 1.2rem;
+  margin-top: 4px;
+}}
+.save-button-notice {{
   font-size: 0.84rem;
   line-height: 1.25;
   color: #c92a2a;
@@ -1257,7 +1288,7 @@ def _truncate_reference_preset_name(name: str, max_chars: int = REFERENCE_PRESET
         return "Empty"
     if len(text) <= max_chars:
         return text
-    return text[: max_chars - 1] + "…"
+    return text[: max_chars - 1] + "遯ｶ・ｦ"
 
 
 def _reference_preset_button_label(preset: dict[str, str], slot_index: int) -> str:
@@ -2538,15 +2569,16 @@ def _run_generation(
         if i < len(out_paths):
             slot_updates.append(gr.update(visible=True))
             audio_updates.append(gr.update(value=out_paths[i], visible=True))
-            save_button_updates.append(gr.update(visible=True))
+            save_button_updates.append(_save_button_update(True))
         else:
             slot_updates.append(gr.update(visible=False))
             audio_updates.append(gr.update(value=None, visible=False))
-            save_button_updates.append(gr.update(visible=False))
+            save_button_updates.append(_save_button_update(False))
     return (
         *slot_updates,
         *audio_updates,
         *save_button_updates,
+        *[_save_button_notice_update() for _ in range(MAX_GRADIO_CANDIDATES)],
         detail_text,
         timing_text,
         str(result.used_seed),
@@ -2590,8 +2622,25 @@ def _set_save_button_busy() -> gr.Button:
     return gr.update(value="Saving...", variant="primary", interactive=False)
 
 
-def _set_save_button_ready() -> gr.Button:
-    return gr.update(value="Save", variant="primary", interactive=True)
+def _save_button_notice_update(message: str = "") -> gr.HTML:
+    text = str(message or "").strip()
+    if text == "":
+        return gr.update(value="")
+    return gr.update(value=f'<div class="save-button-notice">{html.escape(text)}</div>')
+
+
+def _save_button_update(has_audio: bool) -> gr.Button:
+    return gr.update(
+        value="Save",
+        variant="primary",
+        visible=bool(has_audio),
+        interactive=bool(has_audio),
+    )
+
+
+def _set_save_button_ready(generated_audio_path: str | None) -> gr.Button:
+    has_audio = generated_audio_path is not None and str(generated_audio_path).strip() != ""
+    return _save_button_update(has_audio)
 
 
 def _save_generated_audio(
@@ -2600,13 +2649,16 @@ def _save_generated_audio(
     save_dir_raw: str,
     current_log: str,
     audio_index: int,
-) -> str:
+) -> tuple[str, object]:
     if generated_audio_path is None or str(generated_audio_path).strip() == "":
         raise ValueError(f"Generated Audio {audio_index} is empty.")
 
     save_dir_text = str(save_dir_raw or "").strip()
     if save_dir_text == "":
-        raise ValueError("Generated WAV Save Directory is blank.")
+        return (
+            str(current_log or ""),
+            _save_button_notice_update("Generated WAV Save Directory is blank. Set a save folder first."),
+        )
 
     _save_app_settings(output_dir=output_dir_raw, save_dir=save_dir_raw)
 
@@ -2615,7 +2667,7 @@ def _save_generated_audio(
 
     lines = [str(current_log or "").rstrip()] if str(current_log or "").strip() else []
     lines.append(f"saved_manual[{audio_index}]: {saved_path}")
-    return "\n".join(lines)
+    return ("\n".join(lines), _save_button_notice_update())
 
 
 def _load_reference_preset_ui_state() -> tuple[object, ...]:
@@ -2964,6 +3016,7 @@ def build_ui() -> gr.Blocks:
         out_audio_slots: list[gr.Column] = []
         out_audios: list[gr.Audio] = []
         save_generated_audio_buttons: list[gr.Button] = []
+        save_generated_audio_notices: list[gr.HTML] = []
         num_rows = (
             MAX_GRADIO_CANDIDATES + GRADIO_AUDIO_COLS_PER_ROW - 1
         ) // GRADIO_AUDIO_COLS_PER_ROW
@@ -2974,7 +3027,7 @@ def build_ui() -> gr.Blocks:
                         i = row_idx * GRADIO_AUDIO_COLS_PER_ROW + col_idx
                         if i >= MAX_GRADIO_CANDIDATES:
                             break
-                        with gr.Column(min_width=160, visible=(i == 0)) as audio_slot:
+                        with gr.Column(min_width=160, visible=(i == 0), elem_classes=[GENERATED_AUDIO_SLOT_CLASS]) as audio_slot:
                             audio_component = gr.Audio(
                                 label=f"Generated Audio {i + 1}",
                                 type="filepath",
@@ -2988,9 +3041,17 @@ def build_ui() -> gr.Blocks:
                                 "Save",
                                 variant="primary",
                                 visible=(i == 0),
+                                interactive=(i == 0),
                                 elem_classes=[SAVE_GENERATED_AUDIO_BUTTON_CLASS],
                             )
                             save_generated_audio_buttons.append(save_button)
+                            save_notice = gr.HTML(
+                                "",
+                                visible=True,
+                                container=False,
+                                elem_classes=["save-button-notice-host"],
+                            )
+                            save_generated_audio_notices.append(save_notice)
         out_log = gr.Textbox(label="Run Log", lines=8)
         out_timing = gr.Textbox(label="Timing", lines=8)
 
@@ -3225,23 +3286,29 @@ def build_ui() -> gr.Blocks:
                 _set_save_button_busy,
                 outputs=[save_button],
                 queue=False,
+                show_progress="hidden",
             )
             save_click = save_click.then(
                 partial(_save_generated_audio, audio_index=i + 1),
                 inputs=[out_audios[i], output_dir_raw, save_dir_raw, out_log],
-                outputs=[out_log],
+                outputs=[out_log, save_generated_audio_notices[i]],
                 queue=False,
+                show_progress="hidden",
             )
             save_click.then(
                 _set_save_button_ready,
+                inputs=[out_audios[i]],
                 outputs=[save_button],
                 queue=False,
+                show_progress="hidden",
             )
 
         prompt_generate_event = prompt_generate_btn.click(
             _set_generate_buttons_busy,
             outputs=[prompt_generate_btn, main_generate_btn],
             queue=False,
+            show_progress="hidden",
+            show_progress_on=[prompt_generate_btn, main_generate_btn],
         )
         prompt_generate_event = prompt_generate_event.then(
             _run_generation,
@@ -3273,18 +3340,24 @@ def build_ui() -> gr.Blocks:
                 speaker_kv_min_t_raw,
                 speaker_kv_max_layers_raw,
             ],
-            outputs=[*out_audio_slots, *out_audios, *save_generated_audio_buttons, out_log, out_timing, last_seed_value],
+            outputs=[*out_audio_slots, *out_audios, *save_generated_audio_buttons, *save_generated_audio_notices, out_log, out_timing, last_seed_value],
+            show_progress="hidden",
+            show_progress_on=[prompt_generate_btn, main_generate_btn],
         )
         prompt_generate_event.then(
             _set_generate_buttons_ready,
             outputs=[prompt_generate_btn, main_generate_btn],
             queue=False,
+            show_progress="hidden",
+            show_progress_on=[prompt_generate_btn, main_generate_btn],
         )
 
         main_generate_event = main_generate_btn.click(
             _set_generate_buttons_busy,
             outputs=[prompt_generate_btn, main_generate_btn],
             queue=False,
+            show_progress="hidden",
+            show_progress_on=[prompt_generate_btn, main_generate_btn],
         )
         main_generate_event = main_generate_event.then(
             _run_generation,
@@ -3316,12 +3389,16 @@ def build_ui() -> gr.Blocks:
                 speaker_kv_min_t_raw,
                 speaker_kv_max_layers_raw,
             ],
-            outputs=[*out_audio_slots, *out_audios, *save_generated_audio_buttons, out_log, out_timing, last_seed_value],
+            outputs=[*out_audio_slots, *out_audios, *save_generated_audio_buttons, *save_generated_audio_notices, out_log, out_timing, last_seed_value],
+            show_progress="hidden",
+            show_progress_on=[prompt_generate_btn, main_generate_btn],
         )
         main_generate_event.then(
             _set_generate_buttons_ready,
             outputs=[prompt_generate_btn, main_generate_btn],
             queue=False,
+            show_progress="hidden",
+            show_progress_on=[prompt_generate_btn, main_generate_btn],
         )
         model_device.change(
             _on_model_device_change, inputs=[model_device], outputs=[model_precision]
@@ -3369,3 +3446,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+
